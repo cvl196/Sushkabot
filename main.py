@@ -73,8 +73,18 @@ def test_callback(call):
                 meals = cu.fetchall()
                 if len(meals)>0:
                     text = "Ваши приемы:\n"
+                    k = 0 
+                    b = 0 
+                    zh = 0 
+                    u = 0 
                     for meal in meals: 
                         text += f"{meal[0]}: {meal[1]}\n"
+                        kbzhu = list(map(int,meal[1].split()))
+                        k+=kbzhu[0]
+                        b+=kbzhu[1]
+                        zh+=kbzhu[2]
+                        u+=kbzhu[3]
+                    text += f'Сумма за день: {k} {b} {zh} {u}'
                     bot.send_message(call.message.chat.id, text,)
                 else: 
                     bot.send_message(chat_id=call.message.chat.id,text='Приемов не найдено')
@@ -107,6 +117,14 @@ def test_callback(call):
         except: 
             bot.send_message(call.message.chat.id,'неизвестная ошибка',reply_markup=create_keyboard_back())
 
+    elif call.data == 'target':
+        try: 
+            bot.send_message(chat_id=call.message.chat.id,text='Напишите вашу цель кбжу через пробел\n Пример: 43 23 43 2')
+            bot.register_next_step_handler(call.message,add_target)
+        except:
+            pass
+
+
 def add_meal(message):
     try: 
          meal, info = message.text.split(":")
@@ -124,6 +142,24 @@ def add_meal(message):
     bot.send_message(message.chat.id, 'Прием пищи успешно добавлен!')
     bot.send_message(message.chat.id, "Добрый день, выберите действие:", reply_markup=create_keyboard_main())
     
+def add_target(message):
     
+    kbzhu = message.text
+    kbzhuch = kbzhu.split()
+    if len(kbzhuch) and all(k.isdigit() for k in kbzhuch):
+        with sqlite3.connect('database.db') as conn: 
+            cu = conn.cursor()
+            cu.execute('SELECT * FROM users WHERE chat_id=?',(message.chat.id,))
+            if len([*cu.fetchall()])>0:
+                cu.execute('UPDATE users SET VALUES target=? WHERE chat_id=?',(kbzhu,message.chat.id))
+            else: 
+                cu.execute('INSERT INTO users (chat_id,target) VALUES (?,?)',(message.chat.id,kbzhu))
+            conn.commit()
+            cu.close()
+    else: 
+        bot.send_message(chat_id=message.chat.id,text='Неверный формат данных \n Пример: 43 23 43 2')
+        bot.register_next_step_handler(message,add_target)
+
+        
 
 bot.infinity_polling()
