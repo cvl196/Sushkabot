@@ -34,6 +34,14 @@ def create_keyboard_del(items):
     return keyboard
 
 
+def create_today_table():
+    date = datetime.datetime.now().strftime('_%d_%m_%y')
+    with sqlite3.connect('database.db') as conn: 
+        cu = conn.cursor()
+        cu.execute(f'CREATE TABLE IF NOT EXISTS meals{date} (chat_id INTEGER, meal TEXT, info TEXT)')
+        conn.commit()
+        cu.close
+
 
 
 @bot.message_handler(commands=['help', 'start'])
@@ -51,16 +59,16 @@ def echo_message(message):
 def test_callback(call): 
     if call.data == "add":
         try:
-            bot.send_message(call.message.chat.id, "Укажите прием пищи и кбжу в формате: Обед: 500 50 20 45")
+            bot.edit_message_text(chat_id=call.message.chat.id, text = "Укажите прием пищи и кбжу в формате:\nОбед 500 50 20 45", message_id=call.message.id)
             bot.register_next_step_handler(call.message, add_meal)
-        except: 
-            bot.send_message(call.message.chat.id,'Неизвестная ошиибка')
+        except Exception as e: 
+            bot.send_message(call.message.chat.id,e)
 
     elif call.data=='back':
         try:
-            bot.send_message(call.message.chat.id, "Добрый день, выберите действие:", reply_markup=create_keyboard_main())
-        except:
-            bot.send_message(call.message.chat.id,'Неизвестная ошибка')
+            bot.edit_message_text(message_id=call.message.id,chat_id = call.message.chat.id, text = "Добрый день, выберите действие:", reply_markup=create_keyboard_main())
+        except Exception as e :
+            bot.send_message(call.message.chat.id, e)
             
     elif call.data == "mypr":
         try:
@@ -71,8 +79,10 @@ def test_callback(call):
                 cu.execute(f"CREATE TABLE IF NOT EXISTS meals{date} (chat_id INTEGER, meal TEXT, info TEXT)")
                 cu.execute(f"SELECT meal,info FROM MEALS{date} WHERE chat_id = ?", (call.message.chat.id,))
                 meals = cu.fetchall()
+                cu.execute('SELECT target FROM users WHERE chat_id =?',(call.message.chat.id,))
+                target = cu.fetchall()[0][0]
                 if len(meals)>0:
-                    text = "Ваши приемы:\n"
+                    text = "Ваши приемы:\n\n"
                     k = 0 
                     b = 0 
                     zh = 0 
@@ -84,25 +94,36 @@ def test_callback(call):
                         b+=kbzhu[1]
                         zh+=kbzhu[2]
                         u+=kbzhu[3]
-                    text += f'Сумма за день: {k} {b} {zh} {u}'
-                    bot.send_message(call.message.chat.id, text,)
+                    text+=f'\nЦель: {target}\n'
+                    target = list(map(int,target.split()))
+                    text += f'Сумма за день: {k} {b} {zh} {u}\n\n'                    
+                    text+=f'Остаток на сегодня: {target[0]-k} {target[1]-b} {target[2]-zh} {target[3]-u}'
+                    
+                    bot.edit_message_text(chat_id=call.message.chat.id, message_id = call.message.id,text = text, reply_markup=create_keyboard_back())
                 else: 
-                    bot.send_message(chat_id=call.message.chat.id,text='Приемов не найдено')
-                    bot.send_message(chat_id=call.message.chat.id, text = "Добрый день, выберите действие:", reply_markup=create_keyboard_main())
-        except:
-            bot.send_message(call.message.chat.id,'Неизвестная ошибка')
+                    bot.edit_message_text(chat_id=call.message.chat.id,message_id=call.message.id,text='Приемов не найдено',reply_markup=create_keyboard_back())
+                   
+        except Exception as e :
+            bot.send_message(call.message.chat.id,e)
 
     elif call.data == 'del': 
         try:
+            create_today_table()
             date = datetime.datetime.now().strftime("_%d_%m_%y")
             ch_id = call.message.chat.id 
             with sqlite3.connect('database.db') as conn: 
                 cu = conn.cursor()
                 items = [*cu.execute(f'SELECT meal,rowid FROM meals{date} WHERE chat_id = ?',(ch_id,))]
+                
                 cu.close()
-            bot.send_message(chat_id=ch_id, text='Выберите прием для удаления', reply_markup=create_keyboard_del(items))
-        except: 
-            bot.send_message(call.message.chat.id,'неизвестная ошибка')
+            if len(items)>0: 
+                bot.edit_message_text(chat_id=ch_id, message_id = call.message.id,text='Выберите прием для удаления', reply_markup=create_keyboard_del(items))
+            else:
+                bot.edit_message_text(chat_id=ch_id, message_id = call.message.id,text='Приемов не найдено', reply_markup=create_keyboard_back())
+                
+            
+        except Exception as e: 
+            bot.send_message(call.message.chat.id,e)
 
     elif call.data[0:4]=='del%':
         try: 
@@ -113,13 +134,13 @@ def test_callback(call):
                 cu.execute(f'DELETE FROM meals{date} WHERE rowid=?',(rod,))
                 conn.commit()
                 cu.close()
-            bot.send_message(chat_id=call.message.chat.id, text = 'Прием был успешно удален',reply_markup=create_keyboard_back())
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.id, text = 'Прием был успешно удален',reply_markup=create_keyboard_back())
         except: 
             bot.send_message(call.message.chat.id,'неизвестная ошибка',reply_markup=create_keyboard_back())
 
     elif call.data == 'target':
         try: 
-            bot.send_message(chat_id=call.message.chat.id,text='Напишите вашу цель кбжу через пробел\n Пример: 43 23 43 2')
+            bot.edit_message_text(chat_id=call.message.chat.id,message_id = call.message.id, text='Напишите вашу цель кбжу через пробел\n Пример: 43 23 43 2')
             bot.register_next_step_handler(call.message,add_target)
         except:
             pass
@@ -127,9 +148,9 @@ def test_callback(call):
 
 def add_meal(message):
     try: 
-         meal, info = message.text.split(":")
+         meal, info = message.text.split(" ",1)
     except :
-        bot.send_message(message.chat.id, "Неверный формат. Пожалуйста, используйте формат: Обед: 500 50 20 45")
+        bot.send_message(message.chat.id, "Неверный формат. Пожалуйста, используйте формат: Обед 500 50 20 45")
         bot.register_next_step_handler(message, add_meal)
     date = datetime.datetime.now().strftime("_%d_%m_%y")
     conn = sqlite3.connect('database.db')
@@ -139,7 +160,7 @@ def add_meal(message):
     conn.commit()
     cu.close()
     conn.close()
-    bot.send_message(message.chat.id, 'Прием пищи успешно добавлен!')
+    bot.send_message(message.chat.id, 'Прием успешно добавлен!')
     bot.send_message(message.chat.id, "Добрый день, выберите действие:", reply_markup=create_keyboard_main())
     
 def add_target(message):
@@ -151,11 +172,12 @@ def add_target(message):
             cu = conn.cursor()
             cu.execute('SELECT * FROM users WHERE chat_id=?',(message.chat.id,))
             if len([*cu.fetchall()])>0:
-                cu.execute('UPDATE users SET VALUES target=? WHERE chat_id=?',(kbzhu,message.chat.id))
+                cu.execute('UPDATE users SET target=? WHERE chat_id=?',(kbzhu,message.chat.id))
             else: 
                 cu.execute('INSERT INTO users (chat_id,target) VALUES (?,?)',(message.chat.id,kbzhu))
             conn.commit()
             cu.close()
+            bot.send_message(chat_id=message.chat.id, text = 'Цель успешно установлена',reply_markup=create_keyboard_back())
     else: 
         bot.send_message(chat_id=message.chat.id,text='Неверный формат данных \n Пример: 43 23 43 2')
         bot.register_next_step_handler(message,add_target)
