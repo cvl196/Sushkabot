@@ -2,9 +2,9 @@ import telebot
 import dotenv
 import sqlite3
 import datetime
+import os 
 
-
-Api = dotenv.get_key('.env', 'API_KEY')
+Api = os.getenv('API_KEY')
 
 bot = telebot.TeleBot(Api)
 conn = sqlite3.connect('database.db')
